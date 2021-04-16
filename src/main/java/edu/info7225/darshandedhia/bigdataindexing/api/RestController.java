@@ -17,8 +17,18 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import redis.clients.jedis.Jedis;
 
+import java.io.StringWriter;
+import java.io.Writer;
+import java.util.Collections;
+import javax.json.Json;
+import javax.json.JsonValue;
+import javax.json.JsonWriter;
+import javax.json.JsonWriterFactory;
+import javax.json.stream.JsonGenerator;
+
 import java.io.InputStream;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,6 +43,8 @@ public class RestController extends API{
     
     @Autowired(required = false)
     JsonService jsonService;
+    
+    private static String INDEX_NAME = "plan";
 
     /**
      *
@@ -41,7 +53,7 @@ public class RestController extends API{
      * @param headers
      * @return
      */
-    @RequestMapping(value = "/", method = RequestMethod.POST)
+    @RequestMapping(value = "/{object}", method = RequestMethod.POST)
     @ResponseBody
     public ResponseEntity save(@RequestBody String body,
                                @RequestHeader Map<String, String> headers) {
@@ -49,6 +61,9 @@ public class RestController extends API{
         try {
             JSONObject jsonObject = validateSchema(body);
             System.out.println(jsonObject);
+            JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
             String objType = jsonObject.getString("objectType");
             System.out.println(objType);
             String objID = jsonObject.getString("objectId");
@@ -61,6 +76,10 @@ public class RestController extends API{
             System.out.println("Outta error");
             String key = this.jsonService.savePlan(jsonObject, objType);
             System.out.println(key);
+            
+            Set<String> nameSet = new HashSet<>();
+            jsonService.sendEachObject(cloneJsonObject, objType, objID, objType ,objType+"_join", nameSet, null, null,"SAVE");
+            
             JSONObject plan = this.jsonService.getPlan(key);
             System.out.println(plan);
             if (plan == null) {
@@ -204,6 +223,9 @@ public class RestController extends API{
        try {
 
            JSONObject bodyJson = validateSchema(body);
+           JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
 
            jsonObject = this.jsonService.mergeJson(bodyJson, getKey(objectType, objectId));
            if (jsonObject == null || jsonObject.isEmpty()) {
@@ -216,6 +238,9 @@ public class RestController extends API{
            if (keyString == null || keyString.isEmpty()) {
                throw new ObjectNotFoundException(objectNotFoundMessage);
            }
+           
+           Set<String> nameSet = new HashSet<>();
+           jsonService.sendEachObject(cloneJsonObject, objectType, objectId, objectType ,objectType+"_join", nameSet, null, null,"SAVE");
             
             
            ETag = MD5Utils.hashString(resultJsonString);
@@ -254,6 +279,9 @@ public class RestController extends API{
                return notModified(null, hashString);
            }
            JSONObject bodyJson = validateSchema(body);
+           JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
 
            jsonObject = this.jsonService.mergeJson(bodyJson, getKey(objectType, objectId));
            if (jsonObject == null || jsonObject.isEmpty()) {
@@ -266,6 +294,9 @@ public class RestController extends API{
            if (keyString == null || keyString.isEmpty()) {
                throw new ObjectNotFoundException(objectNotFoundMessage);
            }
+           
+           Set<String> nameSet = new HashSet<>();
+           jsonService.sendEachObject(cloneJsonObject, objectType, objectId, objectType ,objectType+"_join", nameSet, null, null,"SAVE");
            
            ETag = MD5Utils.hashString(resultJsonString);
            String ETagKey = getETagKey(objectType, objectId);
@@ -303,6 +334,9 @@ public class RestController extends API{
                return notModified(null, hashString);
            }
            JSONObject bodyJson = validateSchema(body);
+           JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
 
            jsonObject = this.jsonService.mergeJson(bodyJson, getKey(objectType, objectId));
            if (jsonObject == null || jsonObject.isEmpty()) {
@@ -314,6 +348,9 @@ public class RestController extends API{
            if (keyString == null || keyString.isEmpty()) {
                throw new ObjectNotFoundException(objectNotFoundMessage);
            }
+           
+           Set<String> nameSet = new HashSet<>();
+           jsonService.sendEachObject(cloneJsonObject, objectType, objectId, objectType ,objectType+"_join", nameSet, null, null,"SAVE");
            
            ETag = MD5Utils.hashString(resultJsonString);
            String ETagKey = getETagKey(objectType, objectId);
@@ -347,6 +384,9 @@ public class RestController extends API{
 
            //validate schema
            JSONObject bodyJson = validateSchema(body);
+           JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
 
            //update object and get key
            key = this.jsonService.updatePlan(bodyJson, (String) bodyJson.get("objectType"));
@@ -360,7 +400,9 @@ public class RestController extends API{
                throw new ObjectNotFoundException(objectNotFoundMessage);
            }
            
-
+           Set<String> nameSet = new HashSet<>();
+           jsonService.sendEachObject(cloneJsonObject, objectType, objectId, objectType ,objectType+"_join", nameSet, null, null,"SAVE");
+           
            ETag = MD5Utils.hashString(plan.toString());
            String ETagKey = getETagKey(objectType, objectId);
            cache.set(ETagKey, ETag);
@@ -396,6 +438,10 @@ public class RestController extends API{
            if(hashString.equals(ifNoneMatch)){
                return notModified(null, hashString);
            }
+           
+           JSONObject cloneJsonObject = new JSONObject(
+                    new JSONTokener(body)
+            );
 
            //validate schema
            JSONObject bodyJson = validateSchema(body);
@@ -412,7 +458,9 @@ public class RestController extends API{
                throw new ObjectNotFoundException(objectNotFoundMessage);
            } 
    
-
+           Set<String> nameSet = new HashSet<>();
+           jsonService.sendEachObject(cloneJsonObject, objectType, objectId, objectType ,objectType+"_join", nameSet, null, null, "SAVE");
+            
            ETag = MD5Utils.hashString(plan.toString());
            String ETagKey = getETagKey(objectType, objectId);
            cache.set(ETagKey, ETag);
@@ -601,6 +649,21 @@ public class RestController extends API{
 
         return created(cache.get("schema"));
 
+    }
+    
+    public static String format(JsonValue json) {
+        StringWriter stringWriter = new StringWriter();
+        prettyPrint(json, stringWriter);
+        return stringWriter.toString();
+    
+    }
+    public static void prettyPrint(JsonValue json, Writer writer) {
+        Map<String, Object> config
+                = Collections.singletonMap(JsonGenerator.PRETTY_PRINTING, true);
+        JsonWriterFactory writerFactory = Json.createWriterFactory(config);
+        try (JsonWriter jsonWriter = writerFactory.createWriter(writer)) {
+            jsonWriter.write(json);
+        }
     }
 
 
